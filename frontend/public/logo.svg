@@ -1,6 +1,4 @@
-<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <rect width="40" height="40" rx="10" fill="#6366f1"/>
-  <path d="M20 8 L30 14 L30 26 L20 32 L10 26 L10 14 Z" fill="none" stroke="white" stroke-width="2"/>
-  <circle cx="20" cy="20" r="4" fill="white"/>
-  <path d="M20 12 L20 16 M20 24 L20 28 M12 20 L16 20 M24 20 L28 20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <image href="https://raw.githubusercontent.com/Vistara-Diamond/brand-assets/main/blockchains/vdchain/logo.png" x="4" y="4" width="32" height="32"/>
 </svg>
