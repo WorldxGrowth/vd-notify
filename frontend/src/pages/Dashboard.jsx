@@ -1,14 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, Webhook, CreditCard, ArrowRight, CheckCircle, XCircle, TrendingUp, Zap } from 'lucide-react';
+import { Activity, Webhook, CreditCard, ArrowRight, CheckCircle, XCircle, Zap, Copy, Check, Key } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../api';
 import { useAuth } from '../AuthContext';
+
+const copyToClipboard = async (text, setCopied, key) => {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+            document.body.appendChild(ta); ta.focus(); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        setCopied(key);
+        setTimeout(() => setCopied(''), 2000);
+    } catch(e) {}
+};
 
 export default function Dashboard() {
     const { user } = useAuth();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [copied, setCopied] = useState('');
 
     useEffect(() => {
         api.get('/api/stats/overview').then(r => setStats(r.data)).catch(() => {}).finally(() => setLoading(false));
@@ -36,34 +52,83 @@ export default function Dashboard() {
         : 100;
 
     const statCards = [
-        { label:'Fired Today', value: stats?.today?.fired || 0, icon:<Zap size={18}/>, color:'#6366f1', bg:'#6366f1' },
-        { label:'Success', value: stats?.today?.success || 0, icon:<CheckCircle size={18}/>, color:'#10b981', bg:'#10b981' },
-        { label:'Failed', value: stats?.today?.failed || 0, icon:<XCircle size={18}/>, color:'#ef4444', bg:'#ef4444' },
-        { label:'Credits Left', value: Number(stats?.credit_balance || 0).toLocaleString(), icon:<CreditCard size={18}/>, color:'#f59e0b', bg:'#f59e0b' },
+        { label:'Fired Today', value: stats?.today?.fired || 0, icon:<Zap size={18}/>, color:'#6366f1' },
+        { label:'Success', value: stats?.today?.success || 0, icon:<CheckCircle size={18}/>, color:'#10b981' },
+        { label:'Failed', value: stats?.today?.failed || 0, icon:<XCircle size={18}/>, color:'#ef4444' },
+        { label:'Credits Left', value: Number(stats?.credit_balance || 0).toLocaleString(), icon:<CreditCard size={18}/>, color:'#f59e0b' },
     ];
+
+    const apiKey = user?.api_key || '';
+    const shortKey = apiKey ? apiKey.substring(0, 8) + '•••••••••••' + apiKey.slice(-6) : '';
 
     return (
         <div style={{maxWidth:'1000px'}}>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
             {/* Header */}
-            <div style={{marginBottom:'28px'}}>
+            <div style={{marginBottom:'20px'}}>
                 <h1 style={{fontSize:'clamp(20px,3vw,26px)', fontWeight:'800', marginBottom:'4px', color:'var(--text)', letterSpacing:'-0.5px'}}>
                     Welcome back{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}! 👋
                 </h1>
                 <p style={{color:'var(--text-muted)', fontSize:'14px'}}>Here's your notification overview for today</p>
             </div>
 
+            {/* API Key Card — Alchemy style */}
+            <div style={{
+                background:'linear-gradient(135deg, #1a0533 0%, #0d1b6e 60%, #1a3a8f 100%)',
+                borderRadius:'14px', padding:'18px 20px', marginBottom:'20px',
+                border:'1px solid #6366f130',
+            }}>
+                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                        <div style={{width:'36px', height:'36px', background:'rgba(255,255,255,0.1)', borderRadius:'9px', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                            <Key size={17} color="#818cf8"/>
+                        </div>
+                        <div>
+                            <div style={{fontSize:'11px', color:'rgba(255,255,255,0.5)', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:'2px'}}>Your API Key</div>
+                            <div style={{fontSize:'13px', color:'rgba(255,255,255,0.9)', fontFamily:'monospace', letterSpacing:'0.3px'}}>
+                                {shortKey || 'Loading...'}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                        <button onClick={() => copyToClipboard(apiKey, setCopied, 'apikey')} style={{
+                            display:'flex', alignItems:'center', gap:'6px',
+                            background: copied === 'apikey' ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.1)',
+                            border: `1px solid ${copied === 'apikey' ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.2)'}`,
+                            borderRadius:'8px', padding:'7px 14px', cursor:'pointer',
+                            color: copied === 'apikey' ? '#10b981' : 'rgba(255,255,255,0.8)',
+                            fontSize:'12px', fontWeight:'600', transition:'all 0.15s',
+                        }}>
+                            {copied === 'apikey' ? <><Check size={12}/> Copied!</> : <><Copy size={12}/> Copy Key</>}
+                        </button>
+                        <Link to="/docs" style={{
+                            display:'flex', alignItems:'center', gap:'6px',
+                            background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)',
+                            borderRadius:'8px', padding:'7px 14px', cursor:'pointer',
+                            color:'rgba(255,255,255,0.8)', fontSize:'12px', fontWeight:'600',
+                            textDecoration:'none',
+                        }}>
+                            View Docs →
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Usage info */}
+               
+            </div>
+
             {/* Stat Cards */}
-            <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'24px'}} className="stat-cards">
+            <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px'}} className="stat-cards">
                 {statCards.map((s,i) => (
                     <div key={i} style={{
                         background:'var(--bg-card)', border:'1px solid var(--border)',
-                        borderRadius:'14px', padding:'18px 16px',
-                        transition:'all 0.2s', cursor:'default',
+                        borderRadius:'14px', padding:'18px 16px', transition:'all 0.2s',
                     }}
                     onMouseOver={e=>{e.currentTarget.style.borderColor=s.color; e.currentTarget.style.transform='translateY(-2px)'}}
                     onMouseOut={e=>{e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='none'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px'}}>
-                            <div style={{width:'36px', height:'36px', background:s.bg+'18', borderRadius:'9px', display:'flex', alignItems:'center', justifyContent:'center', color:s.color}}>
+                            <div style={{width:'36px', height:'36px', background:s.color+'18', borderRadius:'9px', display:'flex', alignItems:'center', justifyContent:'center', color:s.color}}>
                                 {s.icon}
                             </div>
                         </div>
@@ -73,17 +138,13 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            {/* Chart + Success Rate Row */}
-            <div style={{display:'grid', gridTemplateColumns:'1fr 220px', gap:'16px', marginBottom:'24px', alignItems:'start'}} className="chart-row">
-
-                {/* Chart */}
+            {/* Chart + Success Rate */}
+            <div style={{display:'grid', gridTemplateColumns:'1fr 220px', gap:'16px', marginBottom:'20px', alignItems:'start'}} className="chart-row">
                 <div style={{background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'14px', padding:'20px'}}>
                     <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'8px'}}>
                         <div>
                             <h2 style={{fontSize:'15px', fontWeight:'700', color:'var(--text)'}}>Notifications — Last 7 Days</h2>
-                            <p style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'2px'}}>
-                                {stats?.last30days?.fired || 0} total this month
-                            </p>
+                            <p style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'2px'}}>{stats?.last30days?.fired || 0} total this month</p>
                         </div>
                         <div style={{display:'flex', gap:'14px', fontSize:'12px', color:'var(--text-muted)'}}>
                             {[['#6366f1','Fired'],['#10b981','Success'],['#ef4444','Failed']].map(([c,l]) => (
@@ -121,9 +182,7 @@ export default function Dashboard() {
                     )}
                 </div>
 
-                {/* Right column */}
                 <div style={{display:'flex', flexDirection:'column', gap:'14px'}}>
-                    {/* Success Rate */}
                     <div style={{background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'14px', padding:'20px', textAlign:'center'}}>
                         <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'12px', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.5px'}}>Success Rate</div>
                         <div style={{position:'relative', width:'80px', height:'80px', margin:'0 auto 12px'}}>
@@ -141,7 +200,6 @@ export default function Dashboard() {
                         <div style={{fontSize:'12px', color:'var(--text-muted)'}}>Today's delivery</div>
                     </div>
 
-                    {/* 30 day */}
                     <div style={{background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'14px', padding:'16px'}}>
                         <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'8px', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.5px'}}>30 Day Total</div>
                         <div style={{fontSize:'24px', fontWeight:'800', color:'var(--primary)'}}>{stats?.last30days?.fired || 0}</div>
@@ -161,7 +219,7 @@ export default function Dashboard() {
                             background:'var(--bg-card)', border:'1px solid var(--border)',
                             borderRadius:'14px', padding:'18px 20px',
                             display:'flex', alignItems:'center', justifyContent:'space-between',
-                            transition:'all 0.2s', cursor:'pointer',
+                            transition:'all 0.2s',
                         }}
                         onMouseOver={e=>{e.currentTarget.style.borderColor=item.border; e.currentTarget.style.transform='translateY(-2px)'}}
                         onMouseOut={e=>{e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='none'}}>
@@ -185,9 +243,6 @@ export default function Dashboard() {
                     .stat-cards { grid-template-columns: repeat(2,1fr) !important; }
                     .chart-row { grid-template-columns: 1fr !important; }
                     .quick-links { grid-template-columns: 1fr !important; }
-                }
-                @media (max-width: 400px) {
-                    .stat-cards { grid-template-columns: 1fr 1fr !important; }
                 }
             `}</style>
         </div>

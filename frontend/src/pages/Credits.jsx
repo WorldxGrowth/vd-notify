@@ -9,12 +9,15 @@ const PLANS = [
     { id:'scale',   name:'Scale',    credits:200000, amount:'$12.00', amountUSD:12.00, per:'$0.00006/credit'  },
 ];
 
+const VDC_PRICE_USD = 0.50; // 1 VDC = $0.50
+
 export default function Credits() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [buying, setBuying] = useState('');
     const [orders, setOrders] = useState([]);
-    const [payModal, setPayModal] = useState(null); // { payment_id, address, amount, qr_code, expiry }
+    const [payModal, setPayModal] = useState(null);
+    const [tokenModal, setTokenModal] = useState(null); // { plan }
     const pollRef = useRef(null);
 
     const load = () => {
@@ -30,8 +33,6 @@ export default function Credits() {
     };
 
     useEffect(() => { load(); }, []);
-
-    // Cleanup poll on unmount
     useEffect(() => () => { if(pollRef.current) clearInterval(pollRef.current); }, []);
 
     const startPolling = (paymentId) => {
@@ -39,29 +40,25 @@ export default function Credits() {
         let attempts = 0;
         pollRef.current = setInterval(async () => {
             attempts++;
-            if (attempts > 60) {
-                clearInterval(pollRef.current);
-                return;
-            }
+            if (attempts > 60) { clearInterval(pollRef.current); return; }
             try {
                 const res = await api.get(`/api/payments/check/${paymentId}`);
                 if (res.data.status === 'completed') {
                     clearInterval(pollRef.current);
                     setPayModal(null);
-                    toast.success('🎉 Payment confirmed! Credits added to your account!');
+                    toast.success('🎉 Payment confirmed! Credits added!');
                     load();
                 }
             } catch(e) {}
         }, 4000);
     };
 
-    const buyCredits = async (plan) => {
+    const buyCredits = async (plan, currency) => {
+        setTokenModal(null);
         setBuying(plan.id);
         try {
-            const res = await api.post('/api/payments/create', { plan_id: plan.id });
+            const res = await api.post('/api/payments/create', { plan_id: plan.id, currency });
             const p = res.data;
-
-            // Show custom payment modal
             setPayModal({
                 payment_id: p.payment_id,
                 address: p.address,
@@ -71,11 +68,10 @@ export default function Credits() {
                 checkout_page: p.checkout_page,
                 credits: plan.credits,
                 plan_name: plan.name,
+                currency: p.currency,
+                chain: p.chain,
             });
-
-            // Start polling
             startPolling(p.payment_id);
-
         } catch(err) {
             toast.error(err.response?.data?.error || 'Failed to create payment');
         } finally { setBuying(''); }
@@ -87,7 +83,7 @@ export default function Credits() {
         load();
     };
 
-    const copyAddress = async (text) => {
+    const copyText = async (text) => {
         try {
             if (navigator.clipboard && window.isSecureContext) {
                 await navigator.clipboard.writeText(text);
@@ -118,64 +114,126 @@ export default function Credits() {
         <div style={{maxWidth:'860px'}}>
             <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
 
+            {/* Token Select Modal */}
+            {tokenModal && (
+                <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px'}}>
+                    <div style={{background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'16px', width:'100%', maxWidth:'360px', overflow:'hidden'}}>
+                        <div style={{background:'linear-gradient(135deg,#1a0533,#0d1b6e)', padding:'18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                            <div>
+                                <div style={{color:'white', fontWeight:'800', fontSize:'15px'}}>Select Payment Method</div>
+                                <div style={{color:'rgba(255,255,255,0.6)', fontSize:'12px', marginTop:'2px'}}>{tokenModal.plan.name} — {Number(tokenModal.plan.credits).toLocaleString()} credits</div>
+                            </div>
+                            <button onClick={() => setTokenModal(null)} style={{background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'white', display:'flex', alignItems:'center'}}>
+                                <X size={16}/>
+                            </button>
+                        </div>
+                        <div style={{padding:'20px'}}>
+                            <p style={{fontSize:'13px', color:'var(--text-muted)', marginBottom:'16px', textAlign:'center'}}>Choose how you want to pay</p>
+
+                            {/* USDT Option */}
+                            <button onClick={() => buyCredits(tokenModal.plan, 'USDT')} style={{
+                                width:'100%', padding:'16px', borderRadius:'12px', cursor:'pointer',
+                                background:'var(--bg-card2)', border:'1px solid var(--border)',
+                                display:'flex', alignItems:'center', gap:'14px', marginBottom:'10px',
+                                transition:'all 0.2s',
+                            }}
+                            onMouseOver={e=>{e.currentTarget.style.borderColor='#26a17b'; e.currentTarget.style.background='#26a17b10'}}
+                            onMouseOut={e=>{e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background='var(--bg-card2)'}}>
+                                <div style={{width:'44px', height:'44px', borderRadius:'10px', background:'#26a17b20', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0}}>💵</div>
+                                <div style={{textAlign:'left', flex:1}}>
+                                    <div style={{fontWeight:'700', fontSize:'14px', color:'var(--text)'}}>USDT</div>
+                                    <div style={{fontSize:'11px', color:'var(--text-muted)'}}>BEP-20 · BSC Network</div>
+                                </div>
+                                <div style={{textAlign:'right'}}>
+                                    <div style={{fontWeight:'800', fontSize:'15px', color:'#26a17b'}}>{tokenModal.plan.amount}</div>
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>USDT</div>
+                                </div>
+                            </button>
+
+                            {/* VDC Option */}
+                            <button onClick={() => buyCredits(tokenModal.plan, 'VDC')} style={{
+                                width:'100%', padding:'16px', borderRadius:'12px', cursor:'pointer',
+                                background:'var(--bg-card2)', border:'1px solid var(--border)',
+                                display:'flex', alignItems:'center', gap:'14px',
+                                transition:'all 0.2s',
+                            }}
+                            onMouseOver={e=>{e.currentTarget.style.borderColor='var(--primary)'; e.currentTarget.style.background='#6366f110'}}
+                            onMouseOut={e=>{e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background='var(--bg-card2)'}}>
+                                <div style={{width:'44px', height:'44px', borderRadius:'10px', background:'#6366f120', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', flexShrink:0}}>💎</div>
+                                <div style={{textAlign:'left', flex:1}}>
+                                    <div style={{fontWeight:'700', fontSize:'14px', color:'var(--text)'}}>VDC</div>
+                                    <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Native · VDChain Network</div>
+                                    <div style={{fontSize:'10px', color:'var(--primary)', marginTop:'2px'}}>1 VDC = $0.50</div>
+                                </div>
+                                <div style={{textAlign:'right'}}>
+                                    <div style={{fontWeight:'800', fontSize:'15px', color:'var(--primary)'}}>
+                                        {(tokenModal.plan.amountUSD / VDC_PRICE_USD).toFixed(2)}
+                                    </div>
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>VDC</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Payment Modal */}
             {payModal && (
                 <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px'}}>
                     <div style={{background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'16px', width:'100%', maxWidth:'420px', overflow:'hidden'}}>
-                        {/* Header */}
                         <div style={{background:'linear-gradient(135deg,#1a0533,#0d1b6e)', padding:'20px 24px', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                             <div>
-                                <div style={{color:'white', fontWeight:'800', fontSize:'16px'}}>Pay with USDT</div>
+                                <div style={{color:'white', fontWeight:'800', fontSize:'16px'}}>
+                                    Pay with {payModal.currency}
+                                </div>
                                 <div style={{color:'rgba(255,255,255,0.6)', fontSize:'12px', marginTop:'2px'}}>{payModal.plan_name} — {Number(payModal.credits).toLocaleString()} credits</div>
                             </div>
                             <button onClick={closeModal} style={{background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'white', display:'flex', alignItems:'center'}}>
                                 <X size={16}/>
                             </button>
                         </div>
-
                         <div style={{padding:'20px 24px'}}>
-                            {/* Amount */}
                             <div style={{textAlign:'center', marginBottom:'16px'}}>
-                                <div style={{fontSize:'36px', fontWeight:'900', color:'var(--primary)'}}>${payModal.amount}</div>
-                                <div style={{fontSize:'13px', color:'var(--text-muted)'}}>USDT BEP-20 (BSC Network)</div>
+                                <div style={{fontSize:'36px', fontWeight:'900', color:'var(--primary)'}}>{payModal.amount}</div>
+                                <div style={{fontSize:'13px', color:'var(--text-muted)'}}>
+                                    {payModal.currency} · {payModal.chain} Network
+                                </div>
                             </div>
 
-                            {/* QR Code */}
                             {payModal.qr_code && (
                                 <div style={{textAlign:'center', marginBottom:'16px'}}>
-                                    <img src={payModal.qr_code} alt="QR Code" style={{width:'160px', height:'160px', borderRadius:'10px', border:'2px solid var(--border)'}}
+                                    <img src={payModal.qr_code} alt="QR" style={{width:'160px', height:'160px', borderRadius:'10px', border:'2px solid var(--border)'}}
                                         onError={e=>e.target.style.display='none'}/>
                                 </div>
                             )}
 
-                            {/* Address */}
                             <div style={{marginBottom:'16px'}}>
-                                <div style={{fontSize:'11px', color:'var(--text-muted)', fontWeight:'600', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.5px'}}>Send To Address (BSC)</div>
+                                <div style={{fontSize:'11px', color:'var(--text-muted)', fontWeight:'600', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.5px'}}>
+                                    Send To Address ({payModal.chain})
+                                </div>
                                 <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
                                     <code style={{flex:1, fontSize:'11px', background:'var(--bg-card2)', padding:'8px 10px', borderRadius:'7px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', border:'1px solid var(--border)', color:'var(--text)'}}>
                                         {payModal.address}
                                     </code>
-                                    <button onClick={() => copyAddress(payModal.address)} style={{background:'var(--primary)', border:'none', borderRadius:'7px', padding:'8px 10px', cursor:'pointer', color:'white', fontSize:'11px', fontWeight:'700', flexShrink:0, whiteSpace:'nowrap'}}>
+                                    <button onClick={() => copyText(payModal.address)} style={{background:'var(--primary)', border:'none', borderRadius:'7px', padding:'8px 10px', cursor:'pointer', color:'white', fontSize:'11px', fontWeight:'700', flexShrink:0}}>
                                         Copy
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Amount copy */}
                             <div style={{marginBottom:'16px'}}>
                                 <div style={{fontSize:'11px', color:'var(--text-muted)', fontWeight:'600', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.5px'}}>Exact Amount</div>
                                 <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
                                     <code style={{flex:1, fontSize:'13px', background:'var(--bg-card2)', padding:'8px 10px', borderRadius:'7px', border:'1px solid #f59e0b40', color:'#f59e0b', fontWeight:'700'}}>
-                                        {payModal.amount} USDT
+                                        {payModal.amount} {payModal.currency}
                                     </code>
-                                    <button onClick={() => copyAddress(String(payModal.amount))} style={{background:'#f59e0b', border:'none', borderRadius:'7px', padding:'8px 10px', cursor:'pointer', color:'white', fontSize:'11px', fontWeight:'700', flexShrink:0}}>
+                                    <button onClick={() => copyText(String(payModal.amount))} style={{background:'#f59e0b', border:'none', borderRadius:'7px', padding:'8px 10px', cursor:'pointer', color:'white', fontSize:'11px', fontWeight:'700', flexShrink:0}}>
                                         Copy
                                     </button>
                                 </div>
                                 <div style={{fontSize:'11px', color:'#f59e0b', marginTop:'4px'}}>⚠️ Send exact amount including decimals</div>
                             </div>
 
-                            {/* Processing indicator */}
                             <div style={{background:'#6366f110', border:'1px solid #6366f130', borderRadius:'10px', padding:'12px', textAlign:'center', marginBottom:'16px'}}>
                                 <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginBottom:'4px'}}>
                                     <div style={{width:'8px', height:'8px', borderRadius:'50%', background:'#10b981', animation:'pulse 1.5s ease-in-out infinite'}}/>
@@ -184,7 +242,6 @@ export default function Credits() {
                                 <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Credits will be added automatically after confirmation</div>
                             </div>
 
-                            {/* Checkout page link */}
                             <a href={payModal.checkout_page} target="_blank" rel="noopener noreferrer" style={{
                                 display:'flex', alignItems:'center', justifyContent:'center', gap:'6px',
                                 width:'100%', padding:'10px', borderRadius:'8px', textDecoration:'none',
@@ -224,11 +281,6 @@ export default function Credits() {
                         {balance.toLocaleString()}
                     </div>
                     <div style={{fontSize:'14px', color:'var(--text-muted)', marginTop:'4px'}}>Credits remaining</div>
-                    {data?.credits_reset_at && (
-                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'4px'}}>
-                            Monthly reset: {new Date(data.credits_reset_at).toLocaleDateString('en', {day:'numeric', month:'short', year:'numeric'})}
-                        </div>
-                    )}
                 </div>
                 {lowCredits && (
                     <div style={{background:'#ef444415', border:'1px solid #ef444430', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#ef4444', fontWeight:'600'}}>
@@ -240,7 +292,7 @@ export default function Credits() {
             {/* Plans */}
             <div style={{marginBottom:'8px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px'}}>
                 <h2 style={{fontSize:'16px', fontWeight:'700', color:'var(--text)'}}>Purchase Credits</h2>
-                <div style={{fontSize:'12px', color:'var(--text-muted)'}}>Powered by RazCrypto · USDT (BSC)</div>
+                <div style={{fontSize:'12px', color:'var(--text-muted)'}}>Pay with USDT (BSC) or VDC (VDChain)</div>
             </div>
             <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'14px', marginBottom:'28px'}}>
                 {PLANS.map((p,i) => (
@@ -259,10 +311,10 @@ export default function Credits() {
                         )}
                         <div style={{fontSize:'14px', fontWeight:'700', color:'var(--text)', marginBottom:'6px'}}>{p.name}</div>
                         <div style={{fontSize:'28px', fontWeight:'900', color:'var(--primary)', marginBottom:'2px'}}>{p.amount}</div>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'4px'}}>USDT on BSC</div>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'4px'}}>USDT · or · {(p.amountUSD/VDC_PRICE_USD).toFixed(2)} VDC</div>
                         <div style={{fontSize:'20px', fontWeight:'700', color:'var(--text)', marginBottom:'2px'}}>{Number(p.credits).toLocaleString()}</div>
                         <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'18px'}}>credits · {p.per}</div>
-                        <button onClick={() => buyCredits(p)} disabled={!!buying} style={{
+                        <button onClick={() => setTokenModal({ plan: p })} disabled={!!buying} style={{
                             width:'100%', padding:'10px', borderRadius:'8px', cursor: buying ? 'not-allowed' : 'pointer',
                             background: p.popular ? 'var(--primary)' : 'transparent',
                             color: p.popular ? 'white' : 'var(--primary)',

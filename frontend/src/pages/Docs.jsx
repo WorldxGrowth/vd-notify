@@ -5,7 +5,7 @@ import { useTheme } from '../ThemeContext';
 import config from '../config';
 
 const BASE_URL = 'https://vdnotify.vdscan.io';
-const API_URL  = 'http://84.247.139.193:4001';
+const API_URL  = 'https://vdnotify.vdscan.io';
 
 // Copy helper — works on HTTP too
 const copyText = async (text, setCopied, key) => {
